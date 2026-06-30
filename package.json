@@ -1,0 +1,27 @@
+{
+  "name": "@asymmetric-ai/agent-harness",
+  "version": "0.1.0",
+  "description": "A tiny, model-driven agent loop over any MCP server. Point it at an environment, give it a task, watch what happens when reality drifts.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "asym-agent": "dist/cli.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "check-types": "tsc --noEmit",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
