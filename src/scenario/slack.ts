@@ -14,9 +14,10 @@ export const SLACK_ALLOWLIST: AllowList = {
     },
   },
   'conversations.invite': {
+    // Slack invite takes `users` (a user id or comma-separated list), not `user`.
     args: {
       channel: { type: 'channel-ref', required: true },
-      user: { type: 'user-ref', required: true },
+      users: { type: 'user-ref', required: true },
     },
   },
   'conversations.kick': {

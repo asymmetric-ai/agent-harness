@@ -10,7 +10,7 @@ const evictionSpec: ScenarioSpec = {
   seed: 'acme-corp',
   steps: [
     { method: 'conversations.create', args: { name: '#incidents', is_private: true } },
-    { method: 'conversations.invite', args: { channel: '$1.channel.id', user: '$bot' } },
+    { method: 'conversations.invite', args: { channel: '$1.channel.id', users: '$bot' } },
     { method: 'conversations.kick', args: { channel: '$1.channel.id', user: '$bot' } },
   ],
   agent_task: 'Post a standup summary to #incidents.',
