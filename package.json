@@ -19,7 +19,8 @@
     "build": "tsc",
     "dev": "tsx src/cli.ts",
     "check-types": "tsc --noEmit",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "serve": "bun src/run-service/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>asym · playground</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; background: #fafafa; color: #1a1a1a; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px; }
+  header { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #ddd; padding-bottom: 12px; }
+  header b { letter-spacing: -.3px; }
+  header .tag { color: #666; font-size: 13px; }
+  .cols { display: grid; grid-template-columns: 380px 1fr; gap: 20px; margin-top: 18px; }
+  .panel { border: 1px solid #ddd; border-radius: 8px; background: #fff; padding: 14px 16px; }
+  h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #888; }
+  textarea, input { font: 12px/1.45 ui-monospace, Menlo, monospace; width: 100%; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
+  textarea { min-height: 190px; white-space: pre; }
+  .note { font-size: 11px; color: #999; margin: 5px 0 12px; }
+  button { width: 100%; padding: 11px; background: #1a1a1a; color: #fff; border: none; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #term { font: 12.5px/1.55 ui-monospace, Menlo, monospace; min-height: 420px; white-space: pre-wrap; }
+  .agent { color: #0b6; } .call { color: #96c; } .ok { color: #0a7; } .blocked { color: #c33; font-weight: 600; }
+  .final { color: #0b6; } .setup { color: #777; } .err { color: #c33; } .done { color: #333; font-weight: 600; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><b>asym · playground</b><span class="tag">Watch an agent break when the environment drifts.</span></header>
+  <div class="cols">
+    <div class="panel">
+      <h3>Scenario (paste your own)</h3>
+      <textarea id="spec"></textarea>
+      <div class="note">Declarative steps over the clone's real API. Validated + capped. No code runs.</div>
+      <h3>Model key</h3>
+      <input id="key" placeholder="sk-or-...  (blank = use the demo's budgeted key)" />
+      <div class="note">Used in-memory for this run only. Never stored.</div>
+      <button id="run">▶ Run scenario</button>
+    </div>
+    <div class="panel"><div id="term">Pick Run to start.</div></div>
+  </div>
+</div>
+<script type="module">
+const DEFAULT_SPEC = {
+  id: 'bot-evicted-private-channel',
+  clone: 'slack',
+  seed: 'acme-corp',
+  steps: [
+    { method: 'conversations.create', args: { name: 'incidents', is_private: true } },
+    { method: 'conversations.invite', args: { channel: '$1.channel.id', users: '$bot' } },
+    { method: 'conversations.kick',   args: { channel: '$1.channel.id', users: '$bot' } }
+  ],
+  agent_task: 'Post a one-line standup summary to the Slack channel whose id is $1.channel.id.'
+};
+// NOTE: kick takes `user` (singular) on the clone; invite takes `users`. The demo
+// spec is intentionally simple — the validator will flag arg mistakes clearly.
+DEFAULT_SPEC.steps[2].args = { channel: '$1.channel.id', user: '$bot' };
+const specEl = document.getElementById('spec');
+specEl.value = JSON.stringify(DEFAULT_SPEC, null, 2);
+const term = document.getElementById('term');
+const runBtn = document.getElementById('run');
+
+function line(cls, text) { const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = text; term.appendChild(d); }
+function render(e) {
+  if (e.kind === 'validation_failed') e.errors.forEach(x => line('err', `✗ spec error${x.step ? ' (step ' + x.step + ')' : ''}: ${x.message}`));
+  else if (e.kind === 'setup') line('setup', `setup ${e.step} ${e.method}: ${e.ok ? 'ok' : 'FAILED ' + (e.error || '')}`);
+  else if (e.kind === 'setup_failed') line('err', `✗ setup failed at step ${e.step ?? '?'} — that's a spec error, not the agent breaking`);
+  else if (e.kind === 'agent') {
+    const ev = e.event, t = (ev.text || '').trim();
+    if (ev.kind === 'thinking') line('agent', 'agent> ' + t);
+    else if (ev.kind === 'tool_call') line('call', '  → ' + ev.tool + ' ' + t);
+    else if (ev.kind === 'tool_result') line(ev.isError ? 'blocked' : 'ok', (ev.isError ? '  ✗ ' + ev.tool + ' BLOCKED ' : '  ✓ ' + ev.tool + ' ok ') + t.slice(0, 100));
+    else if (ev.kind === 'final') line('final', 'agent (final)> ' + t);
+    else if (ev.kind === 'gave_up') line('err', t);
+  } else if (e.kind === 'done') line('done', `done — ${e.completed ? 'agent finished' : 'gave up'}, ${e.toolErrors} tool error(s)`);
+}
+
+runBtn.onclick = async () => {
+  term.textContent = '';
+  runBtn.disabled = true;
+  let spec;
+  try { spec = JSON.parse(specEl.value); } catch { line('err', 'spec is not valid JSON'); runBtn.disabled = false; return; }
+  const modelKey = document.getElementById('key').value.trim() || undefined;
+  try {
+    const res = await fetch('/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ spec, modelKey }) });
+    if (!res.ok) { line('err', 'request failed: ' + (await res.text())); runBtn.disabled = false; return; }
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (chunk.startsWith('data: ')) { try { render(JSON.parse(chunk.slice(6))); } catch {} }
+      }
+    }
+  } catch (err) { line('err', 'stream error: ' + err.message); }
+  runBtn.disabled = false;
+};
+</script>
+</body>
+</html>
