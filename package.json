@@ -4,6 +4,13 @@
   "description": "A tiny, model-driven agent loop over any MCP server. Point it at an environment, give it a task, watch what happens when reality drifts.",
   "license": "Apache-2.0",
   "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./cli": "./dist/cli.js"
+  },
   "bin": {
     "asym-agent": "dist/cli.js"
   },
