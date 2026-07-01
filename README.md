@@ -36,8 +36,21 @@ The error path is the point. The harness exits non-zero if the agent gives up or
 
 ```
 npm install -g @asymmetric-ai/agent-harness   # or: bun add -g
-export ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+Set one API key — the provider is auto-detected:
+
+```
+export ANTHROPIC_API_KEY=sk-ant-...      # Anthropic Messages API (default)
+# or
+export OPENROUTER_API_KEY=sk-or-...      # any OpenRouter model (OpenAI-compatible)
+# or
+export OPENAI_API_KEY=sk-...             # OpenAI (or set OPENAI_BASE_URL for any compatible endpoint)
+```
+
+Pick the model with `--model` (e.g. `anthropic/claude-sonnet-4.5` on OpenRouter,
+`claude-sonnet-4-6` on Anthropic, `gpt-4o` on OpenAI) or force a backend with
+`--provider anthropic|openai`.
 
 ## Use
 
@@ -66,7 +79,8 @@ You'll see each step: the agent's reasoning, every `→ tool_call`, and each res
 | `-m, --model` | `claude-sonnet-4-6` | Anthropic model id |
 | `--max-steps` | `8` | max agent turns before giving up |
 
-Needs `ANTHROPIC_API_KEY`. Works with any MCP server that speaks stdio.
+Works with any MCP server that speaks stdio, and any of Anthropic / OpenRouter /
+OpenAI-compatible backends.
 
 ## License
 
