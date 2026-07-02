@@ -8,6 +8,8 @@ export interface LlmTurn {
   text: string[];
   /** Tool calls the model wants executed. Empty ⇒ the model is done. */
   toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+  /** Token usage for THIS turn — drives per-run caps and the budget ledger. */
+  usage: { input: number; output: number };
 }
 
 export interface ToolResult {
@@ -40,9 +42,11 @@ export class AnthropicLlm implements Llm {
   private model: string;
   private tools: Anthropic.Tool[];
   private messages: Anthropic.MessageParam[] = [];
+  private signal?: AbortSignal;
 
-  constructor(model: string, tools: McpTool[], opts?: { apiKey?: string; baseURL?: string }) {
+  constructor(model: string, tools: McpTool[], opts?: { apiKey?: string; baseURL?: string; signal?: AbortSignal }) {
     this.client = new Anthropic({ apiKey: opts?.apiKey, baseURL: opts?.baseURL });
+    this.signal = opts?.signal;
     this.model = model;
     this.label = `anthropic:${model}`;
     this.tools = tools.map((t) => ({
@@ -57,13 +61,16 @@ export class AnthropicLlm implements Llm {
   }
 
   async next(): Promise<LlmTurn> {
-    const resp = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 1024,
-      system: SYSTEM,
-      tools: this.tools,
-      messages: this.messages,
-    });
+    const resp = await this.client.messages.create(
+      {
+        model: this.model,
+        max_tokens: 1024,
+        system: SYSTEM,
+        tools: this.tools,
+        messages: this.messages,
+      },
+      { signal: this.signal },
+    );
     this.messages.push({ role: 'assistant', content: resp.content });
     const text: string[] = [];
     const toolCalls: LlmTurn['toolCalls'] = [];
@@ -73,7 +80,11 @@ export class AnthropicLlm implements Llm {
         toolCalls.push({ id: block.id, name: block.name, args: (block.input ?? {}) as Record<string, unknown> });
       }
     }
-    return { text, toolCalls };
+    return {
+      text,
+      toolCalls,
+      usage: { input: resp.usage?.input_tokens ?? 0, output: resp.usage?.output_tokens ?? 0 },
+    };
   }
 
   addToolResults(results: ToolResult[]): void {
@@ -97,9 +108,11 @@ export class OpenAiLlm implements Llm {
   private model: string;
   private tools: OpenAI.Chat.Completions.ChatCompletionTool[];
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  private signal?: AbortSignal;
 
-  constructor(model: string, tools: McpTool[], opts: { apiKey: string; baseURL?: string }) {
+  constructor(model: string, tools: McpTool[], opts: { apiKey: string; baseURL?: string; signal?: AbortSignal }) {
     this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+    this.signal = opts.signal;
     this.model = model;
     this.label = `openai-compatible:${model}${opts.baseURL ? ` @ ${opts.baseURL}` : ''}`;
     this.tools = tools.map((t) => ({
@@ -120,14 +133,21 @@ export class OpenAiLlm implements Llm {
   }
 
   async next(): Promise<LlmTurn> {
-    const resp = await this.client.chat.completions.create({
-      model: this.model,
-      max_tokens: 1024,
-      tools: this.tools,
-      messages: this.messages,
-    });
+    const resp = await this.client.chat.completions.create(
+      {
+        model: this.model,
+        max_tokens: 1024,
+        tools: this.tools,
+        messages: this.messages,
+      },
+      { signal: this.signal },
+    );
+    const usage = {
+      input: resp.usage?.prompt_tokens ?? 0,
+      output: resp.usage?.completion_tokens ?? 0,
+    };
     const msg = resp.choices[0]?.message;
-    if (!msg) return { text: ['(no response)'], toolCalls: [] };
+    if (!msg) return { text: ['(no response)'], toolCalls: [], usage };
     this.messages.push(msg);
     const text: string[] = [];
     if (msg.content && msg.content.trim()) text.push(msg.content.trim());
@@ -142,7 +162,7 @@ export class OpenAiLlm implements Llm {
       }
       toolCalls.push({ id: tc.id, name: tc.function.name, args });
     }
-    return { text, toolCalls };
+    return { text, toolCalls, usage };
   }
 
   addToolResults(results: ToolResult[]): void {

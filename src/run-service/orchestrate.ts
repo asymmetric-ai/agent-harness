@@ -14,7 +14,8 @@ export type RunEvent =
   | { kind: 'setup'; step: number; method: string; ok: boolean; error?: string }
   | { kind: 'setup_failed'; step?: number; error: string }
   | { kind: 'agent'; event: StepEvent }
-  | { kind: 'done'; completed: boolean; toolErrors: number };
+  | { kind: 'budget_exhausted'; message: string }
+  | { kind: 'done'; completed: boolean; toolErrors: number; tokens: number };
 
 export interface ModelConfig {
   apiKey: string;
@@ -26,6 +27,10 @@ export interface ModelConfig {
 
 export interface RunOptions {
   maxSteps?: number;
+  /** Per-run token cap; the run stops if the agent exceeds it. */
+  maxTokens?: number;
+  /** Abort the run (timeout / client disconnect). */
+  signal?: AbortSignal;
 }
 
 /**
@@ -74,8 +79,8 @@ export async function runScenario(
     const tools = await session.listTools();
     const llm: Llm =
       model.provider === 'anthropic'
-        ? new AnthropicLlm(model.model, tools, { apiKey: model.apiKey })
-        : new OpenAiLlm(model.model, tools, { apiKey: model.apiKey, baseURL: model.baseURL });
+        ? new AnthropicLlm(model.model, tools, { apiKey: model.apiKey, signal: opts.signal })
+        : new OpenAiLlm(model.model, tools, { apiKey: model.apiKey, baseURL: model.baseURL, signal: opts.signal });
     // Resolve interpolation tokens in the task (e.g. "$1.channel.id") so the agent
     // gets the id of the resource setup created — it can't discover a private
     // channel it was evicted from.
@@ -87,10 +92,10 @@ export async function runScenario(
     const result = await runAgent(
       session,
       llm,
-      { task, maxSteps: opts.maxSteps ?? 6 },
+      { task, maxSteps: opts.maxSteps ?? 6, maxTokens: opts.maxTokens },
       (event) => onEvent({ kind: 'agent', event }),
     );
-    onEvent({ kind: 'done', completed: result.completed, toolErrors: result.toolErrors });
+    onEvent({ kind: 'done', completed: result.completed, toolErrors: result.toolErrors, tokens: result.tokens });
   } finally {
     await session.close().catch(() => {});
   }
