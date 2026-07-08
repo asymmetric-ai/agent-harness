@@ -31,6 +31,15 @@ const RATE_WINDOW_MS = Number(process.env.ASYM_PLAYGROUND_RATE_WINDOW_MS) || 60_
 const ledger = new BudgetLedger(BUDGET_FILE, BUDGET_TOKENS);
 const limiter = new RateLimiter(RATE_MAX, RATE_WINDOW_MS);
 
+// Single-flight gate. The local clone pool has no per-run isolation — Slack runs
+// share one workspace (reprovision-per-run) — so concurrent runs would corrupt
+// each other. Serialize runs through one slot with a small wait queue; callers
+// past the queue cap get a clean "busy" signal instead of a corrupted run. This
+// is the MVP stand-in for the warm pool + recycle-per-run (see docs/hosting.md).
+const MAX_WAITING = Number(process.env.ASYM_PLAYGROUND_MAX_QUEUE) || 3;
+let runGate: Promise<void> = Promise.resolve();
+let waiting = 0;
+
 function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let raw = '';
@@ -123,6 +132,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Single-flight: refuse past the queue cap, else wait our turn behind any
+      // in-flight run so runs never overlap on the shared clone.
+      if (waiting >= MAX_WAITING) {
+        send({ kind: 'setup_failed', error: 'The playground is busy right now — please retry in a few seconds.' });
+        res.end();
+        return;
+      }
+      waiting++;
+      const prior = runGate;
+      let releaseGate!: () => void;
+      runGate = new Promise<void>((r) => (releaseGate = r));
+      await prior.catch(() => {});
+      waiting--;
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), RUN_TIMEOUT_MS);
       req.on('close', () => controller.abort()); // reap on disconnect
@@ -148,6 +171,7 @@ const server = http.createServer(async (req, res) => {
         if (usingServerKey && runTokens > 0) ledger.record(runTokens);
         if (lease) await lease.release().catch(() => {});
         res.end();
+        releaseGate(); // let the next queued run proceed
       }
       return;
     }
