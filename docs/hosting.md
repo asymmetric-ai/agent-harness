@@ -1,6 +1,38 @@
 # Hosting the playground — deployment plan (playground.getasym.dev)
 
-Status: **scoping** (2026-07-09). The playground is not a static site — the
+Status: **DEPLOYED & LIVE** (2026-07-09) at <https://playground.getasym.dev>.
+
+## Live deployment (ops record)
+- **URL:** https://playground.getasym.dev (Let's Encrypt TLS via Caddy).
+- **Host:** AWS EC2 `i-0de02ffd83b35be12` (t3.large, us-east-1), Elastic IP
+  `100.50.164.210`, SG `sg-07e088fee1cac6167` (22/80/443). SSH key:
+  `~/.ssh/asym-playground.pem` (`ssh ubuntu@100.50.164.210`).
+- **Processes on the VM:**
+  - `asym-playground.service` (systemd) → run-service on `:8080`, env in
+    `/home/ubuntu/playground.env` (600). `journalctl -u asym-playground -f` for logs;
+    `sudo systemctl restart asym-playground` to bounce.
+  - `caddy` (systemd) → TLS reverse-proxy `:443 → :8080`
+    (`/etc/caddy/Caddyfile`).
+  - Clones via the `asym` CLI: slack backend `:3000` (seed acme-corp), linear
+    backend `:3001`; shared Postgres/Redis containers; `asym-pg-fwd` socat
+    container exposes PG on `:55432` for the Slack MCP.
+  - MCP servers at `/home/ubuntu/clones/{slack,linear}/mcp-server` (scp'd from the
+    private monorepo, `pnpm install`ed); harness at `/home/ubuntu/agent-harness`
+    (branch `feat/cross-app-scenarios`).
+- **Guards:** single-flight run queue, budget breaker capped at 2M tokens
+  (`ASYM_PLAYGROUND_BUDGET_TOKENS`), per-IP rate limit, per-run token cap + timeout.
+- **DNS:** `playground` A record → `100.50.164.210` on Vercel (getasym.dev);
+  apex/`docs` untouched.
+- **Teardown:** `aws ec2 terminate-instances --instance-ids i-0de02ffd83b35be12`,
+  release EIP alloc, delete the `playground` A record + SG.
+- **Known follow-ups:** single-flight caps throughput at 1 concurrent run (swap for
+  the warm pool later); the shared OpenRouter key lives on the host behind the
+  budget breaker; `asym status` didn't register the linear clone (container is
+  healthy and used directly — cosmetic).
+
+## Original plan
+
+Status was: **scoping** (2026-07-09). The playground is not a static site — the
 run-service orchestrates live clones (provision → setup RPCs → spawn the clone's
 **stdio** MCP server → run the agent). Hosting it means hosting the whole stack.
 This plan makes the work + cost + risks explicit before any infra or DNS changes.
