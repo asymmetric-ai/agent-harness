@@ -64,6 +64,8 @@ export async function runScenario(
     adminToken: lease.adminToken,
     botUserId: lease.botUserId,
     adminUserId: lease.adminUserId,
+    allow,
+    refs: lease.refs,
   });
   for (const s of setup.steps) {
     onEvent({ kind: 'setup', step: s.step, method: s.method, ok: s.ok, error: s.error });
@@ -87,6 +89,7 @@ export async function runScenario(
     const task = resolveText(spec.agent_task, {
       botUserId: lease.botUserId,
       adminUserId: lease.adminUserId,
+      refs: lease.refs,
       stepResponses: setup.responses,
     });
     const result = await runAgent(

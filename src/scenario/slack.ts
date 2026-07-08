@@ -1,4 +1,5 @@
 import type { AllowList } from './spec.js';
+import { LINEAR_ALLOWLIST } from './linear.js';
 
 /**
  * Slack clone allow-list: the only RPC methods a scenario may call, with their
@@ -32,9 +33,30 @@ export const SLACK_ALLOWLIST: AllowList = {
       text: { type: 'string', required: true },
     },
   },
+  // ---- richer drift: mutate state the agent is later asked to act on ----
+  'conversations.archive': {
+    // Archive a channel → later posts fail with `is_archived` (distinct from eviction).
+    args: {
+      channel: { type: 'channel-ref', required: true },
+    },
+  },
+  'conversations.rename': {
+    args: {
+      channel: { type: 'channel-ref', required: true },
+      name: { type: 'string', required: true },
+    },
+  },
+  'chat.delete': {
+    // Delete a message → later references to its `ts` fail with `message_not_found`.
+    args: {
+      channel: { type: 'channel-ref', required: true },
+      ts: { type: 'string', required: true },
+    },
+  },
 };
 
-/** Registry of per-clone allow-lists. Add stripe/linear/... as clones go live. */
+/** Registry of per-clone allow-lists. Add stripe/notion/... as clones go live. */
 export const ALLOWLISTS: Record<string, AllowList> = {
   slack: SLACK_ALLOWLIST,
+  linear: LINEAR_ALLOWLIST,
 };

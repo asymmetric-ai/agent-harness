@@ -1,4 +1,4 @@
-import type { ScenarioSpec } from './spec.js';
+import type { AllowList, ScenarioSpec } from './spec.js';
 import { resolveArgs, type InterpContext } from './interpolate.js';
 import { cloneCall } from './cloneClient.js';
 
@@ -23,6 +23,10 @@ export interface SetupOptions {
   adminToken: string;
   botUserId: string;
   adminUserId: string;
+  /** The clone's allow-list — supplies each method's verb/path transport. */
+  allow: AllowList;
+  /** Extra provisioned refs (e.g. `{ team }`) for `$team`-style interpolation. */
+  refs?: Record<string, string>;
 }
 
 /**
@@ -37,6 +41,7 @@ export async function runScenarioSetup(spec: ScenarioSpec, opts: SetupOptions): 
   const ctx: InterpContext = {
     botUserId: opts.botUserId,
     adminUserId: opts.adminUserId,
+    refs: opts.refs,
     stepResponses: [],
   };
 
@@ -52,7 +57,11 @@ export async function runScenarioSetup(spec: ScenarioSpec, opts: SetupOptions): 
       return { ok: false, steps, responses: ctx.stepResponses, failedStep: n };
     }
 
-    const res = await cloneCall(opts.baseUrl, step.method, opts.adminToken, args);
+    const mspec = opts.allow[step.method];
+    const res = await cloneCall(opts.baseUrl, step.method, opts.adminToken, args, {
+      verb: mspec?.verb,
+      path: mspec?.path,
+    });
     steps.push({ step: n, method: step.method, ok: res.ok, error: res.error });
     if (!res.ok) return { ok: false, steps, responses: ctx.stepResponses, failedStep: n };
     ctx.stepResponses.push(res.body);

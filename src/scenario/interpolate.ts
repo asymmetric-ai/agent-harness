@@ -9,6 +9,11 @@
 export interface InterpContext {
   botUserId: string;
   adminUserId: string;
+  /**
+   * Extra provisioned refs beyond bot/admin, keyed by token name (e.g. `team` for
+   * `$team`). Clones that have no such ids just leave this empty.
+   */
+  refs?: Record<string, string>;
   /** Prior step responses, 0-based; step N (1-based) is stepResponses[N-1]. */
   stepResponses: Record<string, unknown>[];
 }
@@ -29,6 +34,13 @@ export function resolveValue(val: unknown, ctx: InterpContext): unknown {
   if (typeof val !== 'string' || !val.startsWith('$')) return val;
   if (val === '$bot') return ctx.botUserId;
   if (val === '$admin') return ctx.adminUserId;
+  const ref = /^\$([a-z][a-z0-9_]*)$/.exec(val);
+  if (ref) {
+    const name = ref[1]!;
+    const v = ctx.refs?.[name];
+    if (v === undefined) throw new Error(`interpolation ${val}: no provisioned ref "${name}"`);
+    return v;
+  }
   const m = /^\$(\d+)\.(.+)$/.exec(val);
   if (m) {
     const stepIdx = parseInt(m[1]!, 10) - 1;
@@ -57,7 +69,7 @@ export function resolveArgs(
  */
 export function resolveText(text: string, ctx: InterpContext): string {
   return text.replace(
-    /\$(?:bot|admin|\d+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)/g,
+    /\$(?:bot|admin|team|\d+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)/g,
     (tok) => {
       const v = resolveValue(tok, ctx);
       return typeof v === 'string' ? v : JSON.stringify(v);

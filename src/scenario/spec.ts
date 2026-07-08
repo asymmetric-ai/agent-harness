@@ -33,7 +33,21 @@ export interface ArgSchema {
   required?: boolean;
 }
 
+export type HttpVerb = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
 export interface MethodSpec {
+  /**
+   * HTTP verb for the call. Default POST (the Slack Web API shape). REST clones
+   * (e.g. Linear) use GET/PATCH/DELETE.
+   */
+  verb?: HttpVerb;
+  /**
+   * URL path template, relative to the clone base. Default is `/{method}` (Slack's
+   * flat RPC style). REST clones template resource paths, e.g. `issues/:id` — a
+   * `:param` segment is filled from the arg of the same name (which may itself be
+   * an interpolation token), and that arg is then omitted from the request body.
+   */
+  path?: string;
   args: Record<string, ArgSchema>;
 }
 
@@ -48,8 +62,9 @@ export const MAX_TASK_CHARS = 500;
  * Interpolation grammar (the ONLY dynamic forms allowed in a string arg):
  *   $bot            → the provisioned bot user's id
  *   $admin          → the admin/creator user's id
+ *   $team           → a provisioned team/workspace id (clones that have one, e.g. Linear)
  *   $N.dotted.path  → a value from step N's ({ok}) response (1-based), e.g. $1.channel.id
  * A token that starts with `$` but doesn't match is a validation error (no
  * arbitrary expressions). Missing paths fail loudly at run time, not silently.
  */
-export const INTERP_TOKEN = /^\$(bot|admin|\d+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)$/;
+export const INTERP_TOKEN = /^\$(bot|admin|team|\d+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)$/;
