@@ -1,5 +1,6 @@
 import type { AllowList, ScenarioSpec } from './spec.js';
 import { resolveArgs, type InterpContext } from './interpolate.js';
+import { DISCONNECT_SHARED, disconnectSharedChannel } from './slackConnect.js';
 import { cloneCall } from './cloneClient.js';
 
 export interface SetupStepResult {
@@ -58,10 +59,18 @@ export async function runScenarioSetup(spec: ScenarioSpec, opts: SetupOptions): 
     }
 
     const mspec = opts.allow[step.method];
-    const res = await cloneCall(opts.baseUrl, step.method, opts.adminToken, args, {
-      verb: mspec?.verb,
-      path: mspec?.path,
-    });
+    let res;
+    try {
+      res = step.method === DISCONNECT_SHARED
+        ? await disconnectSharedChannel(opts.baseUrl, opts.adminToken, args)
+        : await cloneCall(opts.baseUrl, step.method, opts.adminToken, args, {
+            verb: mspec?.verb,
+            path: mspec?.path,
+          });
+    } catch {
+      steps.push({ step: n, method: step.method, ok: false, error: 'setup_transport_failed' });
+      return { ok: false, steps, responses: ctx.stepResponses, failedStep: n };
+    }
     steps.push({ step: n, method: step.method, ok: res.ok, error: res.error });
     if (!res.ok) return { ok: false, steps, responses: ctx.stepResponses, failedStep: n };
     ctx.stepResponses.push(res.body);

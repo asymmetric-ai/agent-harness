@@ -64,6 +64,17 @@ export function validateSpec(spec: ScenarioSpec, allow: AllowList): ValidationRe
       if (typeof val === 'string' && val.startsWith('$') && !INTERP_TOKEN.test(val)) {
         errors.push({ step: n, field: arg, message: `bad interpolation token: ${val}` });
       }
+      if (schema.type === 'team-ref-list') {
+        if (!Array.isArray(val) || val.length !== 1 ||
+            typeof val[0] !== 'string' || !val[0].trim()) {
+          errors.push({ step: n, field: arg, message: `${arg} must contain exactly one workspace id` });
+        } else if (val[0].startsWith('$') && !INTERP_TOKEN.test(val[0])) {
+          errors.push({ step: n, field: arg, message: `bad interpolation token: ${val[0]}` });
+        }
+      }
+      if (schema.type === 'channel-ref' &&
+          (typeof val !== 'string' || !val.trim()))
+        errors.push({ step: n, field: arg, message: `${arg} must be a nonempty string` });
       if (schema.type === 'boolean' && typeof val !== 'boolean')
         errors.push({ step: n, field: arg, message: `${arg} must be a boolean` });
     }

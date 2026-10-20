@@ -187,3 +187,11 @@ is a dev stand-in), and a hosted deploy. Only the Slack clone is wired today.
 ## License
 
 Apache-2.0.
+
+## Slack Connect transition
+
+The scenario interface supports verified removal of the only external workspace
+from a seeded two-workspace channel. Select **Slack Connect lost**, bind the
+fixture IDs, and follow [the setup and acceptance contract](docs/slack-connect.md).
+The default fixture does not establish Connect state. Unsupported or unverified
+backend behavior stops setup before the agent runs. No live Slack run is implied.

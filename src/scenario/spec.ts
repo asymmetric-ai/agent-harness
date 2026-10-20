@@ -26,7 +26,7 @@ export interface ScenarioSpec {
   agent_task: string;
 }
 
-export type ArgType = 'string' | 'boolean' | 'number' | 'user-ref' | 'channel-ref';
+export type ArgType = 'string' | 'boolean' | 'number' | 'user-ref' | 'channel-ref' | 'team-ref-list';
 
 export interface ArgSchema {
   type: ArgType;

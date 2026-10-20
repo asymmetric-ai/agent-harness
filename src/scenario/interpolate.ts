@@ -31,6 +31,7 @@ function digPath(obj: unknown, path: string, token: string): unknown {
 }
 
 export function resolveValue(val: unknown, ctx: InterpContext): unknown {
+  if (Array.isArray(val)) return val.map((item) => resolveValue(item, ctx));
   if (typeof val !== 'string' || !val.startsWith('$')) return val;
   if (val === '$bot') return ctx.botUserId;
   if (val === '$admin') return ctx.adminUserId;

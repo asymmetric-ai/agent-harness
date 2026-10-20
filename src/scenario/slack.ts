@@ -46,6 +46,13 @@ export const SLACK_ALLOWLIST: AllowList = {
       name: { type: 'string', required: true },
     },
   },
+  // One external workspace is removed from a verified two-workspace fixture.
+  'admin.conversations.disconnectShared': {
+    args: {
+      channel_id: { type: 'channel-ref', required: true },
+      leaving_team_ids: { type: 'team-ref-list', required: true },
+    },
+  },
   'chat.delete': {
     // Delete a message → later references to its `ts` fail with `message_not_found`.
     args: {
