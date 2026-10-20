@@ -1,9 +1,12 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LocalClonePool } from './clone.js';
 import { runScenario, type RunEvent, type ModelConfig } from './orchestrate.js';
 import { BudgetLedger, RateLimiter } from './budget.js';
+import type { ApprovedIntent } from '../scenario/outcome.js';
+import type { ClonePool } from './clone.js';
 import type { ScenarioSpec } from '../scenario/spec.js';
 
 /**
@@ -14,7 +17,15 @@ import type { ScenarioSpec } from '../scenario/spec.js';
  * key degrade to a `budget_exhausted` event instead of spending more. BYO-key runs
  * skip the budget meter (the visitor pays) but still get rate limits + caps.
  */
-const pool = new LocalClonePool();
+// Operator-owned module may supply isolated leases and independent observers.
+// No request field can select code, approve intent or supply evidence.
+const pool: ClonePool = process.env.ASYM_CLONE_POOL_MODULE
+  ? await (await import(pathToFileURL(resolve(process.env.ASYM_CLONE_POOL_MODULE)).href)).createPool()
+  : new LocalClonePool();
+const approvedIntents: ApprovedIntent[] = process.env.ASYM_APPROVED_INTENTS_FILE
+  ? JSON.parse(await readFile(process.env.ASYM_APPROVED_INTENTS_FILE, 'utf8')) : [];
+if (!Array.isArray(approvedIntents) || new Set(approvedIntents.map(i => i.id)).size !== approvedIntents.length)
+  throw new Error('approved intents must be an array with unique ids');
 const PORT = parseInt(process.env.PORT ?? '4000', 10);
 const PAGE = fileURLToPath(new URL('../../web/index.html', import.meta.url));
 
@@ -129,16 +140,18 @@ const server = http.createServer(async (req, res) => {
 
       let runTokens = 0;
       let lease;
+      let terminalEvents: RunEvent[] = [];
       try {
         lease = await pool.acquire(spec.clone);
         await runScenario(
           spec,
           lease,
           model,
-          { maxSteps: Number(body.maxSteps) || 6, maxTokens: MAX_RUN_TOKENS, signal: controller.signal },
+          { approvedIntent: approvedIntents.find(i => i.id === spec.intentId), maxSteps: Number(body.maxSteps) || 6, maxTokens: MAX_RUN_TOKENS, signal: controller.signal },
           (e) => {
             if (e.kind === 'done') runTokens = e.tokens;
-            send(e);
+            if (e.kind === 'outcome' || e.kind === 'done') terminalEvents.push(e);
+            else send(e);
           },
         );
       } catch (err) {
@@ -146,7 +159,15 @@ const server = http.createServer(async (req, res) => {
       } finally {
         clearTimeout(timer);
         if (usingServerKey && runTokens > 0) ledger.record(runTokens);
-        if (lease) await lease.release().catch(() => {});
+        if (lease) {
+          try { await lease.release(); }
+          catch {
+            terminalEvents = [{ kind: 'outcome', outcome: {
+              state: 'unknown', reason: 'clone_reset_failed', evidenceRefs: [],
+            } }];
+          }
+        }
+        for (const event of terminalEvents) send(event);
         res.end();
       }
       return;

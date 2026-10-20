@@ -1,3 +1,4 @@
+import { checkAuthority, withOutcome, type ApprovedIntent, type OutcomeGrade } from '../scenario/outcome.js';
 import { McpSession } from '../mcp.js';
 import { runAgent, type StepEvent } from '../agent.js';
 import { AnthropicLlm, OpenAiLlm, type Llm } from '../providers.js';
@@ -14,8 +15,9 @@ export type RunEvent =
   | { kind: 'setup'; step: number; method: string; ok: boolean; error?: string }
   | { kind: 'setup_failed'; step?: number; error: string }
   | { kind: 'agent'; event: StepEvent }
+  | { kind: 'outcome'; outcome: OutcomeGrade }
   | { kind: 'budget_exhausted'; message: string }
-  | { kind: 'done'; completed: boolean; toolErrors: number; tokens: number };
+  | { kind: 'done'; completed: boolean; toolErrors: number; tokens: number; outcome: OutcomeGrade };
 
 export interface ModelConfig {
   apiKey: string;
@@ -26,6 +28,8 @@ export interface ModelConfig {
 }
 
 export interface RunOptions {
+  /** From trusted operator configuration, never POST body. */
+  approvedIntent?: ApprovedIntent;
   maxSteps?: number;
   /** Per-run token cap; the run stops if the agent exceeds it. */
   maxTokens?: number;
@@ -59,6 +63,11 @@ export async function runScenario(
     return;
   }
 
+  if (spec.intentId) {
+    const blocked = checkAuthority(spec, opts.approvedIntent, lease.outcomeSource);
+    if (blocked) { onEvent({ kind: 'outcome', outcome: blocked }); return; }
+  }
+
   const setup = await runScenarioSetup(spec, {
     baseUrl: lease.baseUrl,
     adminToken: lease.adminToken,
@@ -75,31 +84,47 @@ export async function runScenario(
     return;
   }
 
-  const session = new McpSession(lease.mcpLaunch);
-  await session.connect();
-  try {
-    const tools = await session.listTools();
-    const llm: Llm =
-      model.provider === 'anthropic'
-        ? new AnthropicLlm(model.model, tools, { apiKey: model.apiKey, signal: opts.signal })
-        : new OpenAiLlm(model.model, tools, { apiKey: model.apiKey, baseURL: model.baseURL, signal: opts.signal });
-    // Resolve interpolation tokens in the task (e.g. "$1.channel.id") so the agent
-    // gets the id of the resource setup created — it can't discover a private
-    // channel it was evicted from.
-    const task = resolveText(spec.agent_task, {
-      botUserId: lease.botUserId,
-      adminUserId: lease.adminUserId,
-      refs: lease.refs,
-      stepResponses: setup.responses,
-    });
-    const result = await runAgent(
-      session,
-      llm,
-      { task, maxSteps: opts.maxSteps ?? 6, maxTokens: opts.maxTokens },
-      (event) => onEvent({ kind: 'agent', event }),
-    );
-    onEvent({ kind: 'done', completed: result.completed, toolErrors: result.toolErrors, tokens: result.tokens });
-  } finally {
-    await session.close().catch(() => {});
+  const execute = async () => {
+    let finalText = '';
+    const session = new McpSession(lease.mcpLaunch);
+    await session.connect();
+    try {
+      const tools = await session.listTools();
+      const llm: Llm =
+        model.provider === 'anthropic'
+          ? new AnthropicLlm(model.model, tools, { apiKey: model.apiKey, signal: opts.signal })
+          : new OpenAiLlm(model.model, tools, { apiKey: model.apiKey, baseURL: model.baseURL, signal: opts.signal });
+      // Resolve interpolation tokens in the task (e.g. "$1.channel.id") so the agent
+      // gets the id of the resource setup created — it can't discover a private
+      // channel it was evicted from.
+      const task = resolveText(spec.agent_task, {
+        botUserId: lease.botUserId,
+        adminUserId: lease.adminUserId,
+        refs: lease.refs,
+        stepResponses: setup.responses,
+      });
+      const result = await runAgent(
+        session,
+        llm,
+        { task, maxSteps: opts.maxSteps ?? 6, maxTokens: opts.maxTokens },
+        (event) => {
+          if (event.kind === 'final') finalText = event.text;
+          onEvent({ kind: 'agent', event });
+        },
+      );
+      return { ...result, finalText };
+    } finally {
+      await session.close().catch(() => {});
+    }
+  };
+  if (spec.intentId) {
+    const graded = await withOutcome(opts.approvedIntent!, lease.outcomeSource!, execute);
+    onEvent({ kind: 'outcome', outcome: graded.outcome });
+    if (graded.result) onEvent({ kind: 'done', ...graded.result, outcome: graded.outcome });
+  } else {
+    const result = await execute();
+    const outcome: OutcomeGrade = { state: 'unknown', reason: 'legacy_run_has_no_independent_intent', evidenceRefs: [] };
+    onEvent({ kind: 'outcome', outcome });
+    onEvent({ kind: 'done', ...result, outcome });
   }
 }

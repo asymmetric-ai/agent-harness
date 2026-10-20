@@ -516,9 +516,12 @@ function render(e) {
     else if (ev.kind === 'tool_result') line(ev.isError ? 'blocked' : 'ok', (ev.isError ? '  ✗ ' + ev.tool + ' BLOCKED ' : '  ✓ ' + ev.tool + ' ok ') + t.slice(0, 100));
     else if (ev.kind === 'final') line('final', 'agent (final)> ' + t);
     else if (ev.kind === 'gave_up') line('err', t);
+  } else if (e.kind === 'outcome') {
+    line('info', `outcome ${e.outcome.state} — ${e.outcome.reason}`);
+    setStatus(e.outcome.state === 'pass' ? 'done' : 'failed', `outcome ${e.outcome.state}`);
   } else if (e.kind === 'done') {
     line('done', `done — ${e.completed ? 'agent finished' : 'gave up'}, ${e.toolErrors} tool error(s)`);
-    setStatus(e.completed ? 'done' : 'failed', e.completed ? 'finished' : 'gave up');
+    setStatus(e.outcome?.state === 'pass' ? 'done' : 'failed', `outcome ${e.outcome?.state || 'unknown'}`);
   }
 }
 

@@ -1,6 +1,7 @@
 import type { AllowList, ScenarioSpec } from './spec.js';
 import { resolveArgs, type InterpContext } from './interpolate.js';
 import { DISCONNECT_SHARED, disconnectSharedChannel } from './slackConnect.js';
+import { mutateChannelState } from './slackState.js';
 import { cloneCall } from './cloneClient.js';
 
 export interface SetupStepResult {
@@ -63,6 +64,8 @@ export async function runScenarioSetup(spec: ScenarioSpec, opts: SetupOptions): 
     try {
       res = step.method === DISCONNECT_SHARED
         ? await disconnectSharedChannel(opts.baseUrl, opts.adminToken, args)
+        : ['conversations.rename', 'conversations.archive'].includes(step.method)
+        ? await mutateChannelState(opts.baseUrl, opts.adminToken, step.method, args)
         : await cloneCall(opts.baseUrl, step.method, opts.adminToken, args, {
             verb: mspec?.verb,
             path: mspec?.path,

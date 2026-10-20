@@ -1,3 +1,4 @@
+import type { OutcomeSource } from '../scenario/outcome.js';
 import type { McpLaunch } from '../mcp.js';
 import { cloneCall } from '../scenario/cloneClient.js';
 
@@ -16,6 +17,8 @@ export interface CloneLease {
   /** Extra provisioned refs beyond bot/admin (e.g. `{ team }` for Linear's $team). */
   refs?: Record<string, string>;
   mcpLaunch: McpLaunch;
+  /** Trusted isolated pool may supply an independent observer. Local pool cannot. */
+  outcomeSource?: OutcomeSource;
   release(): Promise<void>;
 }
 

@@ -16,6 +16,8 @@ export interface ScenarioStep {
 
 export interface ScenarioSpec {
   id: string;
+  /** Reference to independently approved server-side intent. Never embeds approval. */
+  intentId?: string;
   /** Clone template, e.g. "slack". */
   clone: string;
   /** Named fixture to seed before steps run. */

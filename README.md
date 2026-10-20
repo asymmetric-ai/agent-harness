@@ -195,3 +195,5 @@ from a seeded two-workspace channel. Select **Slack Connect lost**, bind the
 fixture IDs, and follow [the setup and acceptance contract](docs/slack-connect.md).
 The default fixture does not establish Connect state. Unsupported or unverified
 backend behavior stops setup before the agent runs. No live Slack run is implied.
+
+See [independent Slack outcome grading](docs/slack-outcomes.md) for approved intent, exact drift fixtures, evidence requirements, legacy Unknown results and runtime acceptance limits.
