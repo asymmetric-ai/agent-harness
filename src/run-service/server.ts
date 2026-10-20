@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LocalClonePool } from './clone.js';
+import { publishAfterRelease } from './publication.js';
 import { runScenario, type RunEvent, type ModelConfig } from './orchestrate.js';
 import { BudgetLedger, RateLimiter } from './budget.js';
 import type { ApprovedIntent } from '../scenario/outcome.js';
@@ -139,35 +140,25 @@ const server = http.createServer(async (req, res) => {
       req.on('close', () => controller.abort()); // reap on disconnect
 
       let runTokens = 0;
-      let lease;
-      let terminalEvents: RunEvent[] = [];
       try {
-        lease = await pool.acquire(spec.clone);
-        await runScenario(
-          spec,
-          lease,
-          model,
-          { approvedIntent: approvedIntents.find(i => i.id === spec.intentId), maxSteps: Number(body.maxSteps) || 6, maxTokens: MAX_RUN_TOKENS, signal: controller.signal },
-          (e) => {
-            if (e.kind === 'done') runTokens = e.tokens;
-            if (e.kind === 'outcome' || e.kind === 'done') terminalEvents.push(e);
-            else send(e);
-          },
-        );
+        const lease = await pool.acquire(spec.clone);
+        await publishAfterRelease(() => lease.release(), async emit => {
+          await runScenario(
+            spec,
+            lease,
+            model,
+            { approvedIntent: approvedIntents.find(i => i.id === spec.intentId), maxSteps: Number(body.maxSteps) || 6, maxTokens: MAX_RUN_TOKENS, signal: controller.signal },
+            (e) => {
+              if (e.kind === 'done') runTokens = e.tokens;
+              emit(e);
+            },
+          );
+        }, send);
       } catch (err) {
         send({ kind: 'setup_failed', error: (err as Error).message });
       } finally {
         clearTimeout(timer);
         if (usingServerKey && runTokens > 0) ledger.record(runTokens);
-        if (lease) {
-          try { await lease.release(); }
-          catch {
-            terminalEvents = [{ kind: 'outcome', outcome: {
-              state: 'unknown', reason: 'clone_reset_failed', evidenceRefs: [],
-            } }];
-          }
-        }
-        for (const event of terminalEvents) send(event);
         res.end();
       }
       return;
