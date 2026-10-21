@@ -12,11 +12,13 @@ test('CLI transport owns only new clones, validates loopback/digest and cleans r
     const executable = join(folder, 'fixture-cli');
     const config = join(folder, 'row.json');
     const calls = join(folder, 'calls.jsonl');
+    const registry = join(folder, 'registry.json');
+    await writeFile(registry,JSON.stringify({version:2,clones:[],environments:[]}));
     await writeFile(executable, `#!/usr/bin/env bun
 const {readFileSync,appendFileSync}=require('node:fs');
 const a=process.argv.slice(2);appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');
 if(a[0]==='spin')console.log(readFileSync(${JSON.stringify(config)},'utf8'));
-else if(a[0]==='status')console.log('[]');
+else if(a[0]==='status')console.log(readFileSync(${JSON.stringify(registry)},'utf8'));
 else if(a[0]==='query'&&a.includes('--json'))console.log('[{"value":1}]');
 else if(a[0]==='query')console.log('OUTCOME_JSON:{"value":1}');
 `);
@@ -29,6 +31,13 @@ else if(a[0]==='query')console.log('OUTCOME_JSON:{"value":1}');
     assert.deepEqual(await control.query(row.id,'SELECT 1'),[{value:1}]);
     assert.match(await control.write(row.id,'SELECT 1'),/OUTCOME_JSON/);
     await control.reset(row.id);await control.destroy(row.id);assert.equal(await control.exists(row.id),false);
+    await writeFile(registry,JSON.stringify({version:2,clones:[{id:row.id}],environments:[]}));
+    assert.equal(await control.exists(row.id),true);
+    for(const invalid of [[],{version:3,clones:[]},{version:2,clones:[null]},{version:2,clones:[{}]}]){
+      await writeFile(registry,JSON.stringify(invalid));
+      await assert.rejects(()=>control.exists(row.id),/clone_registry_invalid/);
+    }
+    await writeFile(registry,JSON.stringify({version:2,clones:[],environments:[]}));
     for (const bad of [{...row,endpoints:{api:'https://example.com/api'}},{...row,imageDigest:'latest'},{...row,expose:true}]) {
       await writeFile(config,JSON.stringify([bad]));
       await assert.rejects(()=>new AsymCliControl(executable,folder).create(),/clone_origin_or_revision_unverified/);

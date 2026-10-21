@@ -58,8 +58,11 @@ export class AsymCliControl implements CloneControl {
   async reset(id: string) { this.own(id); await this.run(['reset', id]); }
   async destroy(id: string) { this.own(id); await this.run(['destroy', id]); }
   async exists(id: string) {
-    this.own(id); const rows = JSON.parse(await this.run(['status', '--json']));
-    if (!Array.isArray(rows)) throw Error('clone_registry_invalid');
-    return rows.some(row => row.id === id);
+    this.own(id); const registry = JSON.parse(await this.run(['status', '--json']));
+    // CLI 0.2 returns the versioned registry, not a bare clone array.
+    if (!registry || registry.version !== 2 || !Array.isArray(registry.clones) ||
+        registry.clones.some((row: unknown) => !row || typeof row !== 'object' || typeof (row as {id?: unknown}).id !== 'string'))
+      throw Error('clone_registry_invalid');
+    return registry.clones.some((row: {id: string}) => row.id === id);
   }
 }

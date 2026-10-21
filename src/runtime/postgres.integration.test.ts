@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import type { CloneControl, CloneInstance } from './asym.js';
+import { AsymCliControl, type CloneControl, type CloneInstance } from './asym.js';
 import { AsymOutcomePool } from './pool.js';
 import { assessOutcome, type ApprovedIntent } from '../scenario/outcome.js';
 import { runScenario, type RunEvent } from '../run-service/orchestrate.js';
@@ -27,11 +27,13 @@ INSERT INTO channels VALUES('C_SEED','T_HOME','general','public','U_ADMIN',false
 CREATE TABLE channel_members(id text PRIMARY KEY,channel_id text REFERENCES channels,user_id text REFERENCES users);
 CREATE TABLE messages(id text PRIMARY KEY,channel_id text REFERENCES channels,user_id text REFERENCES users,text text,ts text,thread_ts text);`;
 
-const integration = process.env.OUTCOME_PG_BIN ? test : test.skip;
-integration('native PostgreSQL: independent journal, MCP writes, reset and fresh second lease', {timeout:120000}, async () => {
+const dockerMode = !!process.env.OUTCOME_DOCKER_CLI;
+const integration = process.env.OUTCOME_PG_BIN || dockerMode ? test : test.skip;
+integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: independent journal, MCP writes, reset and fresh second lease`, {timeout:dockerMode ? 1_200_000 : 120000}, async () => {
   const pgBin = process.env.OUTCOME_PG_BIN!;
   if (!process.env.OUTCOME_TEST_ROOT) throw Error('Set a task-owned OUTCOME_TEST_ROOT');
-  const folder = await mkdtemp(join(process.env.OUTCOME_TEST_ROOT, 'native-pg-'));
+  const folder = await mkdtemp(join(process.env.OUTCOME_TEST_ROOT, dockerMode ? 'docker-run-' : 'native-pg-'));
+  const cli = dockerMode ? new AsymCliControl(process.env.OUTCOME_DOCKER_CLI, join(folder, 'registry')) : undefined;
   const port = 56000 + Math.floor(Math.random() * 5000);
   let started = false;
   let control!: NativeControl;
@@ -50,6 +52,7 @@ integration('native PostgreSQL: independent journal, MCP writes, reset and fresh
   class NativeControl implements CloneControl {
     owned = new Set<string>(); failReset = false;
     async create(): Promise<CloneInstance> {
+      if(cli){const instance=await cli.create();this.owned.add(instance.id);console.log(`task-owned Docker clone id=${instance.id} image=${instance.imageRevision}`);return instance;}
       const id = 'outcome_'+randomUUID().replaceAll('-','');
       await psql('postgres',`CREATE DATABASE ${id}`);this.owned.add(id);await fixtureSeed(id);
       let apiUrl=baseUrl;
@@ -66,14 +69,15 @@ integration('native PostgreSQL: independent journal, MCP writes, reset and fresh
       }
       return {id,apiUrl,imageRevision:official?JSON.parse(await readFile(join(official,'provenance.json'),'utf8')).manifest_digest:'authored-native-schema-v1'};
     }
-    async query(id: string, sql: string) {return JSON.parse(await psql(id,`SELECT coalesce(json_agg(t),'[]') FROM (${sql}) t`));}
-    async write(id: string, sql: string) {return psql(id,sql);}
+    async query(id: string, sql: string) {if(cli)return cli.query(id,sql);return JSON.parse(await psql(id,`SELECT coalesce(json_agg(t),'[]') FROM (${sql}) t`));}
+    async write(id: string, sql: string) {return cli ? cli.write(id,sql) : psql(id,sql);}
     async reset(id: string) {
       if(this.failReset)throw Error('synthetic_reset_failure');
+      if(cli){await cli.reset(id);return;}
       await psql(id,'DROP SCHEMA IF EXISTS harness_outcome CASCADE; DROP SCHEMA IF EXISTS harness_runtime CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');await fixtureSeed(id);
     }
-    async destroy(id: string) {const child=children.get(id);if(child){child.kill('SIGTERM');await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once('close',()=>resolve());});children.delete(id);}await psql('postgres',`DROP DATABASE IF EXISTS ${id} WITH (FORCE)`);this.owned.delete(id);}
-    async exists(id: string) {return (await this.query('postgres',`SELECT 1 FROM pg_database WHERE datname='${id}'`)).length>0;}
+    async destroy(id: string) {if(cli){await cli.destroy(id);this.owned.delete(id);return;}const child=children.get(id);if(child){child.kill('SIGTERM');await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once('close',()=>resolve());});children.delete(id);}await psql('postgres',`DROP DATABASE IF EXISTS ${id} WITH (FORCE)`);this.owned.delete(id);}
+    async exists(id: string) {if(cli)return cli.exists(id);return (await this.query('postgres',`SELECT 1 FROM pg_database WHERE datname='${id}'`)).length>0;}
   }
   let current = '';
   const http = createServer(async (req,res) => {
@@ -95,10 +99,10 @@ integration('native PostgreSQL: independent journal, MCP writes, reset and fresh
   });
   let baseUrl='';
   try {
-    await exec(join(pgBin,'initdb'),['-D',folder,'--username=postgres','--auth=trust','--no-locale']);
+    if(!cli){await exec(join(pgBin,'initdb'),['-D',folder,'--username=postgres','--auth=trust','--no-locale']);
     await exec(join(pgBin,'pg_ctl'),['-D',folder,'-l',join(folder,'server.log'),'-o',`-h 127.0.0.1 -p ${port} -k ${folder}`,'-w','start']);started=true;
     const pid=(await readFile(join(folder,'postmaster.pid'),'utf8')).split('\n')[0];
-    console.log(`task-owned PostgreSQL pid=${pid} cwd=${folder} purpose=TEN-270 isolated runtime integration`);
+    console.log(`task-owned PostgreSQL pid=${pid} cwd=${folder} purpose=TEN-270 isolated runtime integration`);}
     await new Promise<void>(resolve=>http.listen(0,'127.0.0.1',resolve));
     baseUrl=`http://127.0.0.1:${(http.address() as AddressInfo).port}/api`;
     control=new NativeControl();
@@ -133,7 +137,7 @@ integration('native PostgreSQL: independent journal, MCP writes, reset and fresh
       await lease.release();
     }console.log('verified: wrong-channel, duplicate and subsequently deleted writes cannot pass');
 
-    if(official){
+    if(official||cli){
       lease=await acquire();
       const setup=await runScenarioSetup({...spec,steps:[{method:'conversations.rename',args:{channel:'C_TARGET',name:'customer-updates-renamed'}},
         {method:'conversations.rename',args:{channel:'C_OTHER',name:'customer-updates'}}]},
@@ -190,6 +194,6 @@ integration('native PostgreSQL: independent journal, MCP writes, reset and fresh
     for(const child of children.values())child.kill('SIGTERM');
     if(http.listening)await new Promise<void>(resolve=>http.close(()=>resolve()));
     if(started)await exec(join(pgBin,'pg_ctl'),['-D',folder,'-m','fast','-w','stop']);
-    await rm(folder,{recursive:true,force:true});
+    if(!control || control.owned.size===0)await rm(folder,{recursive:true,force:true});
   }
 });
