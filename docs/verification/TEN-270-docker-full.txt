@@ -1,0 +1,27 @@
+bun test v1.3.11 (af24e281)
+
+src/runtime/postgres.integration.test.ts:
+task-owned Docker clone id=slack-6e2d image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: MCP -> HTTP -> persisted row -> independent trigger -> positive outcome -> reset/destroy
+task-owned Docker clone id=slack-8a36 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: second-run isolation and stale match rejection
+task-owned Docker clone id=slack-7b2d image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+task-owned Docker clone id=slack-9af0 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+task-owned Docker clone id=slack-9c49 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: wrong-channel, duplicate and subsequently deleted writes cannot pass
+task-owned Docker clone id=slack-133f image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+task-owned Docker clone id=slack-9ac0 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+task-owned Docker clone id=slack-2dda image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: actual rename/name reuse, archive refusal and persisted Connect disconnect with external read denial
+task-owned Docker clone id=slack-3145 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: full setup -> scripted local model -> MCP -> official backend -> independent grade -> release publication
+task-owned Docker clone id=slack-92ba image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: action-time audience loss even after final sharing is restored
+task-owned Docker clone id=slack-b251 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+task-owned Docker clone id=slack-7ef5 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: disabled audit withholds evidence; failed reset still destroys owned clone
+(pass) official Docker/CLI: independent journal, MCP writes, reset and fresh second lease [370202.58ms]
+
+ 1 pass
+ 0 fail
+Ran 1 test across 1 file. [370.26s]

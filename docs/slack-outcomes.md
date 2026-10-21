@@ -106,7 +106,7 @@ an owned temporary-output directory, then run:
 bun test --timeout 120000 src/runtime/postgres.integration.test.ts
 ```
 
-Without `OUTCOME_PG_BIN` this integration test is explicitly skipped. Its default
+Without `OUTCOME_PG_BIN` or `OUTCOME_DOCKER_CLI` this integration test is explicitly skipped. Its default
 backend is an authored fixture. `OUTCOME_OFFICIAL_ASSETS` optionally selects an
 operator-extracted published clone bundle with `clone/migrations`,
 `clone/seeds/acme-corp.sql`, `app/dist/main.js`, image dependencies and
@@ -119,8 +119,31 @@ cleans owned processes/databases in `finally`. It uses no paid model calls.
 
 On 21 October 2026 this mode ran against published backend digest
 `sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73`.
-The official Docker/CLI lifecycle was not executed on the development Mac; native
-backend integration does not establish that lifecycle. Real provider-model
-behavior, deployed service operation and customer acceptance remain separate.
+The official Docker/CLI lifecycle also passed on 21 October 2026, using official
+CLI 0.2.0 and Docker 29.8.1 against that same pinned backend. The first actual run
+exposed a CLI contract mismatch: `status --json` returns a version-2 registry,
+not a clone array. The adapter now validates that envelope.
+
+To reproduce the actual Docker/CLI mode, install the official CLI and Docker,
+select the reviewed backend digest through `ASYM_SLACK_BACKEND_IMAGE`, and run:
+
+```sh
+OUTCOME_DOCKER_CLI=/absolute/path/to/asym \
+OUTCOME_TEST_ROOT=/your/task/directory \
+bun test --timeout 1200000 src/runtime/postgres.integration.test.ts
+```
+
+Run this serially in an isolated Docker environment: the official CLI uses shared
+PostgreSQL/Redis infrastructure. The test owns fresh clones only; its operator
+must separately track any shared infrastructure they create. No customer state
+or paid model call is needed. `OUTCOME_DOCKER_SMOKE=1` selects the focused physical
+cleanup cases, including a hidden registry entry with a retained backend/database.
+The adapter independently observes Docker labels and the exact clone database;
+registry disappearance alone cannot establish destruction. Unavailable probes
+withhold success. Failed integration cleanup retains owned IDs and registry files
+for operator recovery. See the revision-specific [verification record](verification/TEN-270-runtime.md).
+
+Real provider-model behavior, deployed harness service operation and customer
+acceptance remain separate.
 The existing Tensile business-outcome engine remains the cloud contract for
 broader persisted assessments; this harness does not write cloud assessments.

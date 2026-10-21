@@ -1,0 +1,15 @@
+{
+  "source_revision": "7af287c67c4a7bd7d01a9ebfbcc2d6eb6f88caf0",
+  "command": "bun test --timeout1200000 src/runtime/postgres.integration.test.ts",
+  "case_mode": "full official Docker/CLI",
+  "source_files": {
+    "src/runtime/pool.ts": "0d61f1a25898d2f93bbe6fbc7ec92b1861569a6f3b294b01a827aa5e06a7816d",
+    "src/runtime/control.test.ts": "5ef3031efe488c95bc56c42d95542e04ed38344d21424c6120607029736d7d61",
+    "src/runtime/slackMcp.ts": "1c00550ede1d7cda5bdd84081ec02bac96b928b523e35d7f85fc8f6c18400aba",
+    "src/runtime/asym.ts": "9b376e86f075d404cfbf40b572b123bb5a35e47642319c72caadc6f34e833a79",
+    "src/runtime/postgres.integration.test.ts": "72036bfe2461fa251dba5f94d5a0e99501c79d281a633a1e5cd01db933f57d9a",
+    "src/runtime/audit.ts": "3a305a3388580d2bcd35fefe84930fa2a6d4c6732a7cb428c3a461c715edc568",
+    "src/runtime/gateway.ts": "26a76aa9811f1cd0f318734156a4b481024c669c47419891a62311e1d4c3b540",
+    "src/runtime/intentDrafts.ts": "99303efa7ab762dcf2adf8ae0f8a3b7e1be6a15070c351e6d8a9d50bcb311166"
+  }
+}

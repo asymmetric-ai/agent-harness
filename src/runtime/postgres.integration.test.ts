@@ -137,6 +137,18 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
         const hidden=JSON.parse(originalRegistry);hidden.clones=hidden.clones.filter((r:{id:string})=>r.id!==retained.id);
         await writeFile(registryPath,JSON.stringify(hidden));
         assert.equal(await cli.exists(retained.id),true,'removed registry cannot hide a retained backend');
+        // Simulate a successful CLI destroy acknowledgement without physical cleanup.
+        const originalDestroy=cli.destroy.bind(cli);const originalExists=cli.exists.bind(cli);
+        try {
+          cli.destroy=async()=>{};
+          await assert.rejects(()=>control.destroy(retained.id),/physical_destroy_unverified/);
+          assert.equal(control.owned.has(retained.id),true);
+          assert.equal(JSON.parse(await readFile(join(folder,'owned-resources.json'),'utf8')).cloneIds.includes(retained.id),true);
+          cli.exists=async()=>{throw Error('synthetic_absence_probe_unavailable');};
+          await assert.rejects(()=>control.destroy(retained.id),/synthetic_absence_probe_unavailable/);
+          assert.equal(control.owned.has(retained.id),true);
+          assert.equal(JSON.parse(await readFile(join(folder,'owned-resources.json'),'utf8')).cloneIds.includes(retained.id),true);
+        } finally {cli.destroy=originalDestroy;cli.exists=originalExists;}
         const {stdout}=await exec('docker',['ps','-aq','--filter',`label=asym.clone=${retained.id}`]);
         const containerIds=stdout.trim().split(/\s+/).filter(Boolean);
         assert.equal(containerIds.length,1);assert.match(containerIds[0]!,/^[a-f0-9]+$/);
