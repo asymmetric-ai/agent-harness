@@ -52,7 +52,7 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
   };
   class NativeControl implements CloneControl {
     owned = new Set<string>(); failReset = false;
-    async retainRecovery() {if(cli)await writeFile(join(folder,'owned-resources.json'),JSON.stringify({cloneIds:[...this.owned],registryDirectory:join(folder,'registry')},null,2));}
+    async retainRecovery(cleanupError?:unknown) {if(cli)await writeFile(join(folder,'owned-resources.json'),JSON.stringify({owner:'TEN-270',cloneIds:[...this.owned],clones:[...this.owned].map(id=>({id,database:'clone_'+id.replaceAll('-','_'),containerLabel:'asym.clone='+id})),registryDirectory:join(folder,'registry'),...(cleanupError?{lastCleanupError:cleanupError instanceof Error?cleanupError.message:'cleanup_failed'}:{})},null,2));}
     async create(): Promise<CloneInstance> {
       if(cli){const instance=await cli.create();this.owned.add(instance.id);await this.retainRecovery();console.log(`task-owned Docker clone id=${instance.id} image=${instance.imageRevision}`);return instance;}
       const id = 'outcome_'+randomUUID().replaceAll('-','');
@@ -78,7 +78,7 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
       if(cli){await cli.reset(id);return;}
       await psql(id,'DROP SCHEMA IF EXISTS harness_outcome CASCADE; DROP SCHEMA IF EXISTS harness_runtime CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');await fixtureSeed(id);
     }
-    async destroy(id: string) {if(cli){await cli.destroy(id);if(await cli.exists(id))throw Error('physical_destroy_unverified');this.owned.delete(id);await this.retainRecovery();return;}const child=children.get(id);if(child){child.kill('SIGTERM');await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once('close',()=>resolve());});children.delete(id);}await psql('postgres',`DROP DATABASE IF EXISTS ${id} WITH (FORCE)`);this.owned.delete(id);}
+    async destroy(id: string) {if(cli){try{await cli.destroy(id);if(await cli.exists(id))throw Error('physical_destroy_unverified');}catch(error){await this.retainRecovery(error);throw error;}this.owned.delete(id);await this.retainRecovery();return;}const child=children.get(id);if(child){child.kill('SIGTERM');await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once('close',()=>resolve());});children.delete(id);}await psql('postgres',`DROP DATABASE IF EXISTS ${id} WITH (FORCE)`);this.owned.delete(id);}
     async exists(id: string) {if(cli)return cli.exists(id);return (await this.query('postgres',`SELECT 1 FROM pg_database WHERE datname='${id}'`)).length>0;}
   }
   let current = '';
