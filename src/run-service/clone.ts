@@ -1,3 +1,4 @@
+import type { ScenarioSpec } from '../scenario/spec.js';
 import type { OutcomeSource } from '../scenario/outcome.js';
 import type { McpLaunch } from '../mcp.js';
 import { cloneCall } from '../scenario/cloneClient.js';
@@ -19,11 +20,13 @@ export interface CloneLease {
   mcpLaunch: McpLaunch;
   /** Trusted isolated pool may supply an independent observer. Local pool cannot. */
   outcomeSource?: OutcomeSource;
+  /** Trusted test/acceptance probe; never serialized into model tools/events. */
+  fixtureEvidence?: { externalRead(channel: string): Promise<{status:number; body:Record<string,unknown>}> };
   release(): Promise<void>;
 }
 
 export interface ClonePool {
-  acquire(clone: string): Promise<CloneLease>;
+  acquire(clone: string, spec?: ScenarioSpec): Promise<CloneLease>;
 }
 
 /** A short unique-ish suffix for provisioned identities (dev pool, one per run). */

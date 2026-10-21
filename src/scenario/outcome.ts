@@ -144,7 +144,7 @@ export function assessOutcome(intent: ApprovedIntent, source: OutcomeSource, ini
   if (badFinal) return badFinal;
   const refs = [initial.revision, final.revision];
   if (initial.revision === final.revision) return grade('unknown', 'distinct_snapshot_revisions_required', intent, refs);
-  if (evidence.journalComplete !== true || !Array.isArray(evidence.writes) ||
+  if (!Array.isArray(evidence.writes) ||
       !Number.isFinite(time(evidence.from)) || !Number.isFinite(time(evidence.through)) ||
       time(evidence.from) > time(initial.capturedAt) || time(evidence.through) < time(final.capturedAt) ||
       time(final.capturedAt) < time(initial.capturedAt)) return grade('unknown', 'action_journal_incomplete', intent, refs);
@@ -165,6 +165,7 @@ export function assessOutcome(intent: ApprovedIntent, source: OutcomeSource, ini
   if (writes.length > (intent.expected === 'write' ? 1 : 0)) return grade('fail', 'prohibited_or_duplicate_write', intent, refs);
   if (initial.records.some(r => !final.records.some(f => sameRecord(r, f))))
     return grade('fail', 'initial_records_modified_or_deleted', intent, refs);
+  if (evidence.journalComplete !== true) return grade('unknown', 'action_journal_incomplete', intent, refs);
   const added = final.records.filter(r => !initialIds.has(r.id));
   if (added.length !== writes.length || added.some(r => !writes.some(w => sameRecord(w.record, r))))
     return grade('unknown', 'final_records_and_journal_disagree', intent, refs);

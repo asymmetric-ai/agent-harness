@@ -10,6 +10,8 @@ export interface McpLaunch {
   cwd?: string;
   /** Extra env merged over the current process env (tokens, DB URLs, etc.). */
   env?: Record<string, string>;
+  /** Isolated runtime tools receive no ambient control-plane/DB credentials. */
+  inheritEnv?: boolean;
 }
 
 export interface McpTool {
@@ -41,7 +43,7 @@ export class McpSession {
       cwd: launch.cwd,
       // Pass the current env through (PATH, tokens, DATABASE_URL, ...) plus any
       // explicit overrides. A dev harness, not a sandbox — keep it simple.
-      env: { ...(process.env as Record<string, string>), ...(launch.env ?? {}) },
+      env: { ...(launch.inheritEnv === false ? {} : process.env as Record<string, string>), ...(launch.env ?? {}) },
     });
     this.client = new Client(
       { name: 'asym-agent-harness', version: '0.1.0' },

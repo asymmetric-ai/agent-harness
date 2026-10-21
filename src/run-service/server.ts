@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LocalClonePool } from './clone.js';
+import { bindIntent, createPool as createOutcomePool } from '../runtime/pool.js';
 import { publishAfterRelease } from './publication.js';
 import { runScenario, type RunEvent, type ModelConfig } from './orchestrate.js';
 import { BudgetLedger, RateLimiter } from './budget.js';
@@ -22,7 +23,7 @@ import type { ScenarioSpec } from '../scenario/spec.js';
 // No request field can select code, approve intent or supply evidence.
 const pool: ClonePool = process.env.ASYM_CLONE_POOL_MODULE
   ? await (await import(pathToFileURL(resolve(process.env.ASYM_CLONE_POOL_MODULE)).href)).createPool()
-  : new LocalClonePool();
+  : process.env.ASYM_OUTCOME_HOME ? createOutcomePool() : new LocalClonePool();
 const approvedIntents: ApprovedIntent[] = process.env.ASYM_APPROVED_INTENTS_FILE
   ? JSON.parse(await readFile(process.env.ASYM_APPROVED_INTENTS_FILE, 'utf8')) : [];
 if (!Array.isArray(approvedIntents) || new Set(approvedIntents.map(i => i.id)).size !== approvedIntents.length)
@@ -141,13 +142,14 @@ const server = http.createServer(async (req, res) => {
 
       let runTokens = 0;
       try {
-        const lease = await pool.acquire(spec.clone);
+        const lease = await pool.acquire(spec.clone, spec);
         await publishAfterRelease(() => lease.release(), async emit => {
           await runScenario(
             spec,
             lease,
             model,
-            { approvedIntent: approvedIntents.find(i => i.id === spec.intentId), maxSteps: Number(body.maxSteps) || 6, maxTokens: MAX_RUN_TOKENS, signal: controller.signal },
+            { approvedIntent: approvedIntents.find(i => i.id === spec.intentId)
+                ? bindIntent(approvedIntents.find(i => i.id === spec.intentId)!, lease) : undefined, maxSteps: Number(body.maxSteps) || 6, maxTokens: MAX_RUN_TOKENS, signal: controller.signal },
             (e) => {
               if (e.kind === 'done') runTokens = e.tokens;
               emit(e);
