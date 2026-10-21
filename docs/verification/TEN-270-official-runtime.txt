@@ -1,0 +1,28 @@
+bun test v1.3.11 (af24e281)
+
+src/runtime/postgres.integration.test.ts:
+task-owned PostgreSQL pid=64857 cwd=/Users/raizada/Developer/tensile-evidence/TEN-270/native-pg-p94ClM purpose=TEN-270 isolated runtime integration
+task-owned official clone backend pid=64875 database=outcome_3fc186ac6b2b45ceb6887d77da6c2d1a port=59289
+verified: MCP -> HTTP -> persisted row -> independent trigger -> positive outcome -> reset/destroy
+task-owned official clone backend pid=65095 database=outcome_931e374bd0d14454a75c47126775542d port=59289
+verified: second-run isolation and stale match rejection
+task-owned official clone backend pid=65184 database=outcome_bb749adeecfa4abc937c7463d2c800cf port=59289
+task-owned official clone backend pid=65296 database=outcome_efd3009e3ebb4bce91125eff62e5eda8 port=59289
+task-owned official clone backend pid=65418 database=outcome_6200224913ec4245a1f05247502d1a42 port=59289
+verified: wrong-channel, duplicate and subsequently deleted writes cannot pass
+task-owned official clone backend pid=65509 database=outcome_876e3453640c447e8470064e50fdaa4c port=59289
+task-owned official clone backend pid=65598 database=outcome_50491b73ac124e11973f4f81c83f22e2 port=59289
+task-owned official clone backend pid=65677 database=outcome_b3c92ea5d1c04adfab384f161e8f42eb port=59289
+verified: actual rename/name reuse, archive refusal and persisted Connect disconnect with external read denial
+task-owned official clone backend pid=65767 database=outcome_5b51d3d4c70145d49010c49d91223534 port=59289
+verified: full setup -> scripted local model -> MCP -> official backend -> independent grade -> release publication
+task-owned official clone backend pid=65852 database=outcome_7e5f2e4608354f44ac4271ad60b90249 port=59289
+verified: action-time audience loss even after final sharing is restored
+task-owned official clone backend pid=65933 database=outcome_eb7b6720200c4a689f57d2761586b64f port=59289
+task-owned official clone backend pid=66004 database=outcome_f5ff6d01e1e04d038e78c8406caab0fc port=59289
+verified: disabled audit withholds evidence; failed reset still destroys owned clone
+(pass) native PostgreSQL: independent journal, MCP writes, reset and fresh second lease [17507.33ms]
+
+ 1 pass
+ 0 fail
+Ran 1 test across 1 file. [17.66s]

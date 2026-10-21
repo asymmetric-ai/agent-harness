@@ -1,0 +1,73 @@
+bun test v1.3.11 (af24e281)
+
+src/runtime/control.test.ts:
+(pass) CLI transport owns only new clones, validates loopback/digest and cleans rejected origins [441.42ms]
+(pass) lease reference binding never templates approved text, hashes or source references [0.13ms]
+
+src/runtime/postgres.integration.test.ts:
+(skip) native PostgreSQL: independent journal, MCP writes, reset and fresh second lease
+
+src/run-service/budget.test.ts:
+(pass) budget ledger records spend and computes remaining [0.91ms]
+(pass) budget ledger persists across instances (survives restart) [0.14ms]
+(pass) rate limiter allows up to max then blocks within the window [0.06ms]
+
+src/run-service/publication.test.ts:
+(pass) a passing outcome cannot be published until release verifies cleanup [0.17ms]
+(pass) reset rejection replaces an otherwise passing outcome with Unknown [0.08ms]
+(pass) execution failure still releases the lease and cannot publish a pass [0.08ms]
+(pass) full scenario path refuses missing independent authority before any MCP/model launch [0.38ms]
+
+src/scenario/slackState.test.ts:
+(pass) conversations.rename requires observed transition [12.28ms]
+(pass) conversations.rename no-op fails [2.41ms]
+(pass) conversations.archive requires observed transition [2.58ms]
+(pass) conversations.archive no-op fails [2.28ms]
+
+src/scenario/validate.test.ts:
+(pass) the eviction spec validates [0.07ms]
+(pass) unknown method is rejected [0.04ms]
+(pass) over the step cap is rejected [0.14ms]
+(pass) missing required arg is rejected [0.03ms]
+(pass) unknown arg is rejected [0.03ms]
+(pass) bad interpolation token is rejected
+(pass) over-long agent_task is rejected [0.02ms]
+
+src/scenario/interpolate.test.ts:
+(pass) literals pass through unchanged [0.02ms]
+(pass) $bot and $admin resolve
+(pass) $N.path digs into a prior step response [0.07ms]
+(pass) out-of-range step throws loudly [0.06ms]
+(pass) missing path throws loudly (no silent undefined) [0.02ms]
+(pass) resolveArgs resolves a whole arg map [0.01ms]
+
+src/scenario/slackConnect.test.ts:
+(pass) Connect allows one explicit external workspace and rejects malformed targets [0.12ms]
+(pass) workspace IDs inside arrays resolve against prior fixture responses [0.07ms]
+(pass) verified two-team Connect disconnection retains audience and readback evidence [3.86ms]
+(pass) unsupported info or ambiguous initial sharing stops before mutation [12.68ms]
+(pass) backend rejection stops setup and preserves the provider reason [2.24ms]
+(pass) acknowledged no-op, missing readback or wrong final channel cannot pass setup [11.95ms]
+(pass) failed transition stops later setup writes [2.70ms]
+
+src/scenario/outcome.test.ts:
+(pass) exactly one new authorized write passes despite a stale matching record [2.69ms]
+(pass) existing match alone cannot satisfy a new write [0.05ms]
+(pass) wrong destination and old-name reuse fail even with matching content [0.06ms]
+(pass) duplicate writes fail [0.06ms]
+(pass) action-time external audience loss fails even when final sharing is restored [0.04ms]
+(pass) archived-channel write and deleted fallback cannot pass [0.06ms]
+(pass) honest refusal only passes an independently approved refusal scenario [0.02ms]
+(pass) missing approval, digest, scope or reset blocks before execution [0.09ms]
+(pass) incomplete coverage, stale window, unproved setup and unrelated actor withhold a pass [0.15ms]
+(pass) orchestration captures independent boundaries around execution [0.18ms]
+(pass) source failure and invalid setup stop before agent and are Unknown [0.09ms]
+(pass) exact fixture scenario operations validate; a reused-name fixture must be proved [0.28ms]
+
+1 tests skipped:
+(skip) native PostgreSQL: independent journal, MCP writes, reset and fresh second lease
+
+ 45 pass
+ 1 skip
+ 0 fail
+Ran 46 tests across 9 files. [711.00ms]
