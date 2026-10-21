@@ -37,6 +37,7 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
   const port = 56000 + Math.floor(Math.random() * 5000);
   let started = false;
   let control!: NativeControl;
+  let executionError: unknown;
   const official=process.env.OUTCOME_OFFICIAL_ASSETS;
   const children=new Map<string,ChildProcess>();
   const fixtureSeed=async(database:string)=>{
@@ -51,8 +52,9 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
   };
   class NativeControl implements CloneControl {
     owned = new Set<string>(); failReset = false;
+    async retainRecovery() {if(cli)await writeFile(join(folder,'owned-resources.json'),JSON.stringify({cloneIds:[...this.owned],registryDirectory:join(folder,'registry')},null,2));}
     async create(): Promise<CloneInstance> {
-      if(cli){const instance=await cli.create();this.owned.add(instance.id);console.log(`task-owned Docker clone id=${instance.id} image=${instance.imageRevision}`);return instance;}
+      if(cli){const instance=await cli.create();this.owned.add(instance.id);await this.retainRecovery();console.log(`task-owned Docker clone id=${instance.id} image=${instance.imageRevision}`);return instance;}
       const id = 'outcome_'+randomUUID().replaceAll('-','');
       await psql('postgres',`CREATE DATABASE ${id}`);this.owned.add(id);await fixtureSeed(id);
       let apiUrl=baseUrl;
@@ -76,7 +78,7 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
       if(cli){await cli.reset(id);return;}
       await psql(id,'DROP SCHEMA IF EXISTS harness_outcome CASCADE; DROP SCHEMA IF EXISTS harness_runtime CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');await fixtureSeed(id);
     }
-    async destroy(id: string) {if(cli){await cli.destroy(id);this.owned.delete(id);return;}const child=children.get(id);if(child){child.kill('SIGTERM');await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once('close',()=>resolve());});children.delete(id);}await psql('postgres',`DROP DATABASE IF EXISTS ${id} WITH (FORCE)`);this.owned.delete(id);}
+    async destroy(id: string) {if(cli){await cli.destroy(id);if(await cli.exists(id))throw Error('physical_destroy_unverified');this.owned.delete(id);await this.retainRecovery();return;}const child=children.get(id);if(child){child.kill('SIGTERM');await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once('close',()=>resolve());});children.delete(id);}await psql('postgres',`DROP DATABASE IF EXISTS ${id} WITH (FORCE)`);this.owned.delete(id);}
     async exists(id: string) {if(cli)return cli.exists(id);return (await this.query('postgres',`SELECT 1 FROM pg_database WHERE datname='${id}'`)).length>0;}
   }
   let current = '';
@@ -127,7 +129,25 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
     assert.equal(assessOutcome(intent(),source,initial,await source.finish(),'Posted',true).reason,'required_new_write_absent');
     await lease.release();console.log('verified: second-run isolation and stale match rejection');
 
-    if(cli && process.env.OUTCOME_DOCKER_SMOKE==='1'){console.log('verified: physical container and database cleanup checks on both fresh Docker leases');return;}
+    if(cli && process.env.OUTCOME_DOCKER_SMOKE==='1'){
+      const retained=await control.create();
+      const registryPath=join(folder,'registry','registry.json');
+      const originalRegistry=await readFile(registryPath,'utf8');
+      try {
+        const hidden=JSON.parse(originalRegistry);hidden.clones=hidden.clones.filter((r:{id:string})=>r.id!==retained.id);
+        await writeFile(registryPath,JSON.stringify(hidden));
+        assert.equal(await cli.exists(retained.id),true,'removed registry cannot hide a retained backend');
+        const {stdout}=await exec('docker',['ps','-aq','--filter',`label=asym.clone=${retained.id}`]);
+        const containerIds=stdout.trim().split(/\s+/).filter(Boolean);
+        assert.equal(containerIds.length,1);assert.match(containerIds[0]!,/^[a-f0-9]+$/);
+        await exec('docker',['rm','-f',containerIds[0]!]);
+        assert.equal(await cli.exists(retained.id),true,'removed registry/backend cannot hide retained database');
+        assert.equal(control.owned.has(retained.id),true);
+        assert.equal(JSON.parse(await readFile(join(folder,'owned-resources.json'),'utf8')).cloneIds.includes(retained.id),true);
+      } finally {await writeFile(registryPath,originalRegistry);await control.destroy(retained.id);}
+      assert.equal(await cli.exists(retained.id),false);assert.equal(control.owned.size,0);
+      console.log('verified: physical cleanup on fresh leases; retained backend/database detected despite deleted registry; recovery retained until verified teardown');return;
+    }
 
     for(const mode of ['wrong','duplicate','deleted'] as const){
       lease=await acquire();source=lease.outcomeSource!;initial=await source.capture();
@@ -191,11 +211,14 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
     await assert.rejects(source.capture(),/audit_trigger_unverified/);await lease.release();
     lease=await acquire();control.failReset=true;await assert.rejects(lease.release(),/synthetic_reset_failure/);control.failReset=false;
     assert.equal(control.owned.size,0);console.log('verified: disabled audit withholds evidence; failed reset still destroys owned clone');
-  }finally{
-    if(control)for(const id of [...control.owned])await control.destroy(id);
+  }catch(error){executionError=error;throw error;}finally{
+    const cleanupErrors:unknown[]=[];
+    if(control)for(const id of [...control.owned]){try{await control.destroy(id);}catch(error){cleanupErrors.push(error);}}
     for(const child of children.values())child.kill('SIGTERM');
     if(http.listening)await new Promise<void>(resolve=>http.close(()=>resolve()));
     if(started)await exec(join(pgBin,'pg_ctl'),['-D',folder,'-m','fast','-w','stop']);
     if(!control || control.owned.size===0)await rm(folder,{recursive:true,force:true});
+    else console.error(`Owned clone cleanup unverified; recovery metadata retained at ${folder}`);
+    if(cleanupErrors.length)throw new AggregateError([...(executionError?[executionError]:[]),...cleanupErrors],'owned_clone_cleanup_unverified');
   }
 });
