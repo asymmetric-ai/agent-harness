@@ -33,3 +33,7 @@ Connect coverage is the adapter-owned persisted simulation, not native/live Slac
 ## Author disposition — 21 October 2026
 
 The P2 was resolved in ae852abdae2f6e7befe41e7bf025f55572e4ddbf and refined in 1d57f09: integration control now removes ownership only after independent physical absence, records clone ID/exact database/container label and cleanup error, retains the registry and recovery record after inconclusive/retained observations, and aggregates cleanup errors without masking the original execution failure. The focused smoke injects a successful destroy acknowledgement while actual backend/database resources remain, plus an unavailable absence probe, and asserts ownership/recovery persistence. Normal physical destruction is then restored and verified. This is the author's disposition, not another independent review. Execution on this final source is pending resource admission; the previous full run remains bound to 7af287c.
+
+## Executed finding disposition
+
+Final source 9ef9009ef129aaa8c8884ed1ad2cab5eb5a39685 passed TypeScript, 45 deterministic tests (1 integration skip), and the actual three-clone Docker cleanup smoke in 82.09 seconds. The smoke injects both false-success destruction and an unavailable absence observer while owned resources remain, verifies recovery retention, then restores real destruction and proves physical absence. The P2 is resolved and its regression cases passed. No second blind review was performed. See [raw smoke evidence](TEN-270-docker-cleanup.txt) and [source binding](TEN-270-docker-cleanup-source.json).

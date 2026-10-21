@@ -1,0 +1,14 @@
+bun test v1.3.11 (af24e281)
+
+src/runtime/postgres.integration.test.ts:
+task-owned Docker clone id=slack-dbf3 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: MCP -> HTTP -> persisted row -> independent trigger -> positive outcome -> reset/destroy
+task-owned Docker clone id=slack-bc7c image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: second-run isolation and stale match rejection
+task-owned Docker clone id=slack-57c1 image=ghcr.io/asymmetric-ai/asymmetric-slack-backend@sha256:98c869320c69dcc66dabbb40c7cdfe47a6c371459198970a1f7cd172520e0a73
+verified: physical cleanup on fresh leases; retained backend/database detected despite deleted registry; recovery retained until verified teardown
+(pass) official Docker/CLI: independent journal, MCP writes, reset and fresh second lease [82029.40ms]
+
+ 1 pass
+ 0 fail
+Ran 1 test across 1 file. [82.09s]
