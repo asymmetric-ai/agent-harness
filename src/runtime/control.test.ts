@@ -13,6 +13,17 @@ test('CLI transport owns only new clones, validates loopback/digest and cleans r
     const config = join(folder, 'row.json');
     const calls = join(folder, 'calls.jsonl');
     const registry = join(folder, 'registry.json');
+    const dockerState = join(folder,'docker-state.json');
+    const dockerExecutable = join(folder,'fixture-docker');
+    await writeFile(dockerState,JSON.stringify({}));
+    await writeFile(dockerExecutable,`#!/usr/bin/env bun
+const {readFileSync}=require('node:fs');const a=process.argv.slice(2);const s=JSON.parse(readFileSync(${JSON.stringify(dockerState)},'utf8'));
+if(s.unavailable)process.exit(2);
+if(a[0]==='ps'){if(a.some(x=>x.startsWith('label=asym.clone='))){if(s.backend)console.log('remaining-owned-backend');}else if(!s.sharedMissing)console.log('fixture-postgres');}
+else if(a[0]==='exec'){if(s.databaseUnavailable)process.exit(2);if(s.database)console.log('1');}
+else process.exit(2);
+`);
+    await chmod(dockerExecutable,0o700);
     await writeFile(registry,JSON.stringify({version:2,clones:[],environments:[]}));
     await writeFile(executable, `#!/usr/bin/env bun
 const {readFileSync,appendFileSync}=require('node:fs');
@@ -23,9 +34,9 @@ else if(a[0]==='query'&&a.includes('--json'))console.log('[{"value":1}]');
 else if(a[0]==='query')console.log('OUTCOME_JSON:{"value":1}');
 `);
     await chmod(executable, 0o700);
-    const row = {id:'slack-owned-test', endpoints:{api:'http://127.0.0.1:1234/api'}, imageDigest:'repo@sha256:'+'a'.repeat(64)};
+    const row = {id:'slack-owned-test', database:'clone_slack_owned_test', endpoints:{api:'http://127.0.0.1:1234/api'}, imageDigest:'repo@sha256:'+'a'.repeat(64)};
     await writeFile(config, JSON.stringify([row]));
-    const control = new AsymCliControl(executable, folder);
+    const control = new AsymCliControl(executable, folder, dockerExecutable);
     await assert.rejects(() => control.reset('slack-user-existing'), /clone_not_owned/);
     assert.equal((await control.create()).imageRevision,row.imageDigest);
     assert.deepEqual(await control.query(row.id,'SELECT 1'),[{value:1}]);
@@ -38,12 +49,22 @@ else if(a[0]==='query')console.log('OUTCOME_JSON:{"value":1}');
       await assert.rejects(()=>control.exists(row.id),/clone_registry_invalid/);
     }
     await writeFile(registry,JSON.stringify({version:2,clones:[],environments:[]}));
-    for (const bad of [{...row,endpoints:{api:'https://example.com/api'}},{...row,imageDigest:'latest'},{...row,expose:true}]) {
+    // A CLI registry entry disappearing is insufficient evidence of destruction.
+    for(const retained of [{backend:true},{database:true}]){
+      await writeFile(dockerState,JSON.stringify(retained));
+      assert.equal(await control.exists(row.id),true);
+    }
+    for(const unknown of [{sharedMissing:true},{databaseUnavailable:true},{unavailable:true}]){
+      await writeFile(dockerState,JSON.stringify(unknown));
+      await assert.rejects(()=>control.exists(row.id),/clone_database_absence_unverified|clone_command_failed/);
+    }
+    await writeFile(dockerState,JSON.stringify({}));
+    for (const bad of [{...row,endpoints:{api:'https://example.com/api'}},{...row,imageDigest:'latest'},{...row,expose:true},{...row,database:'postgres'}]) {
       await writeFile(config,JSON.stringify([bad]));
-      await assert.rejects(()=>new AsymCliControl(executable,folder).create(),/clone_origin_or_revision_unverified/);
+      await assert.rejects(()=>new AsymCliControl(executable,folder,dockerExecutable).create(),/clone_origin_or_revision_unverified/);
     }
     const log=(await readFile(calls,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
-    assert.equal(log.filter(args=>args[0]==='destroy').length,4);
+    assert.equal(log.filter(args=>args[0]==='destroy').length,5);
     assert.equal(log.some(args=>args.includes('slack-user-existing')),false);
     assert.deepEqual(log[0],['spin','slack','--mode','api','--seed','acme-corp','--json']);
   } finally {await rm(folder,{recursive:true,force:true});}

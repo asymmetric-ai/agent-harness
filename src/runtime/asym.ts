@@ -31,7 +31,8 @@ export async function command(executable: string, args: string[], input = '', en
 /** Official @asymmetric-ai/cli 0.2 lifecycle and query contract. Owns only freshly-created IDs. */
 export class AsymCliControl implements CloneControl {
   private owned = new Set<string>();
-  constructor(private executable = 'asym', private home?: string) {}
+  private databases = new Map<string,string>();
+  constructor(private executable = 'asym', private home?: string, private dockerExecutable = 'docker') {}
   private run(args: string[], input = '') {
     return command(this.executable, args, input, { ...process.env, ...(this.home ? { ASYM_HOME: this.home } : {}) });
   }
@@ -43,6 +44,9 @@ export class AsymCliControl implements CloneControl {
     if (typeof row.id !== 'string' || !/^slack-[a-z0-9-]+$/i.test(row.id)) throw Error('clone_identity_unverified');
     this.owned.add(row.id);
     try {
+      const expectedDatabase = 'clone_' + row.id.replaceAll('-', '_');
+      if (row.database !== expectedDatabase) throw Error('clone_database_identity_unverified');
+      this.databases.set(row.id,expectedDatabase);
       const url = new URL(row.endpoints?.api);
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.protocol !== 'http:' || row.expose === true ||
           typeof row.imageDigest !== 'string' || !/@sha256:[a-f0-9]{64}$/.test(row.imageDigest)) throw Error('clone_origin_or_revision_unverified');
@@ -63,6 +67,19 @@ export class AsymCliControl implements CloneControl {
     if (!registry || registry.version !== 2 || !Array.isArray(registry.clones) ||
         registry.clones.some((row: unknown) => !row || typeof row !== 'object' || typeof (row as {id?: unknown}).id !== 'string'))
       throw Error('clone_registry_invalid');
-    return registry.clones.some((row: {id: string}) => row.id === id);
+    if (registry.clones.some((row: {id: string}) => row.id === id)) return true;
+    // CLI0.2 removes registry entries even if its Compose/drop commands fail.
+    // Independently verify physical teardown; never infer it from registry alone.
+    const containers = await command(this.dockerExecutable,['ps','-aq','--filter',`label=asym.clone=${id}`]);
+    if (containers.trim()) return true;
+    const database = this.databases.get(id);
+    if (!database) throw Error('clone_database_identity_unverified');
+    const postgres = (await command(this.dockerExecutable,['ps','-q','--filter',
+      'label=com.docker.compose.project=asym-shared','--filter','label=com.docker.compose.service=postgres'])).trim().split(/\s+/).filter(Boolean);
+    if (postgres.length !== 1) throw Error('clone_database_absence_unverified');
+    const present = (await command(this.dockerExecutable,['exec',postgres[0]!, 'psql','-U','postgres','-d','postgres','-tAc',
+      `SELECT 1 FROM pg_database WHERE datname='${database}'`])).trim();
+    if (present !== '' && present !== '1') throw Error('clone_database_absence_unverified');
+    return present === '1';
   }
 }

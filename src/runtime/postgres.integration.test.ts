@@ -127,6 +127,8 @@ integration(`${dockerMode ? 'official Docker/CLI' : 'native PostgreSQL'}: indepe
     assert.equal(assessOutcome(intent(),source,initial,await source.finish(),'Posted',true).reason,'required_new_write_absent');
     await lease.release();console.log('verified: second-run isolation and stale match rejection');
 
+    if(cli && process.env.OUTCOME_DOCKER_SMOKE==='1'){console.log('verified: physical container and database cleanup checks on both fresh Docker leases');return;}
+
     for(const mode of ['wrong','duplicate','deleted'] as const){
       lease=await acquire();source=lease.outcomeSource!;initial=await source.capture();
       const channel=mode==='wrong'?'C_OTHER':'C_TARGET';
