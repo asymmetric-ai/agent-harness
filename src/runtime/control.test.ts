@@ -43,7 +43,9 @@ else if(a[0]==='query')console.log('OUTCOME_JSON:{"value":1}');
 test('lease reference binding never templates approved text, hashes or source references', () => {
   const intent={actorId:'$bot',workspaceId:'$workspace',channel:{id:'C_TARGET',workspaceId:'$workspace',audienceIds:['$workspace']},
     audienceIds:['$workspace','T_EXTERNAL'],text:'$bot $workspace',reference:'$workspace',scenarioDigest:'$bot'} as ApprovedIntent;
-  const lease={botUserId:'U_NEW',refs:{workspace:'T_NEW'}} as Parameters<typeof bindIntent>[1];
+  const lease: Parameters<typeof bindIntent>[1] = {botUserId:'U_NEW',refs:{workspace:'T_NEW'},
+    baseUrl:'http://127.0.0.1:1',adminToken:'fixture-admin',botToken:'fixture-bot',adminUserId:'U_ADMIN',
+    mcpLaunch:{command:'unused'},release:async()=>{}};
   const bound=bindIntent(intent,lease);
   assert.equal(bound.actorId,'U_NEW');assert.equal(bound.channel.workspaceId,'T_NEW');
   assert.deepEqual(bound.audienceIds,['T_NEW','T_EXTERNAL']);
